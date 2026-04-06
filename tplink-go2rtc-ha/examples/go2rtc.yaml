@@ -1,0 +1,16 @@
+streams:
+  tplink_ch1_main:
+    - rtsp://CAMERA_USERNAME:CAMERA_PASSWORD@CAMERA_IP:554/stream1&channel=1
+
+  tplink_ch2_main:
+    - rtsp://CAMERA_USERNAME:CAMERA_PASSWORD@CAMERA_IP:554/stream1&channel=2
+
+  tplink_ch2_talk:
+    - rtsp://CAMERA_USERNAME:CAMERA_PASSWORD@CAMERA_IP:554/stream1&channel=2
+    - ffmpeg:tplink_ch2_main#audio=opus
+    - multitrans://CAMERA_USERNAME:CAMERA_PASSWORD@CAMERA_IP:554
+
+rtsp:
+  listen: ":8554"
+  username: "GO2RTC_RTSP_USERNAME"
+  password: "GO2RTC_RTSP_PASSWORD"
