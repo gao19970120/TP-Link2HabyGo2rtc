@@ -1,0 +1,130 @@
+type: custom:vertical-stack-in-card
+card_mod:
+  style: |
+    ha-card {
+      background:
+        radial-gradient(circle at top left, rgba(81, 132, 255, 0.16), transparent 26%),
+        linear-gradient(160deg, rgba(16, 26, 38, 0.98), rgba(8, 13, 22, 0.96));
+      border: 1px solid rgba(152, 190, 255, 0.12);
+      border-radius: 24px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+      padding: 14px;
+    }
+cards:
+  - type: custom:button-card
+    icon: mdi:cctv
+    name: 大门监控
+    label: 双目实时画面、对讲和云台控制
+    show_state: false
+    show_label: true
+    tap_action:
+      action: none
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: custom:webrtc-camera
+        url: tplink_ch1_main
+        ui: true
+        muted: true
+        title: 云台镜头
+
+      - type: custom:webrtc-camera
+        streams:
+          - url: tplink_ch2_main
+            name: ' '
+          - url: tplink_ch2_talk
+            name: '  '
+            mode: webrtc
+            media: video,audio,microphone
+        ui: true
+        title: 固定镜头
+
+  - type: custom:button-card
+    icon: mdi:cursor-move
+    name: 云台控制
+    label: 轻点移动，长按麦克风才会进入对讲
+    show_state: false
+    show_label: true
+    tap_action:
+      action: none
+
+  - type: horizontal-stack
+    cards:
+      - type: custom:button-card
+        icon: mdi:microphone
+        tap_action:
+          action: none
+        press_action:
+          action: javascript
+          javascript: |
+            [[[
+              const findCards = () => {
+                const result = [];
+                const walk = (node) => {
+                  if (!node) return;
+                  if (node.tagName && node.tagName.toLowerCase() === 'webrtc-camera') result.push(node);
+                  const next = [];
+                  if (node.shadowRoot) next.push(...node.shadowRoot.children);
+                  if (node.children) next.push(...node.children);
+                  next.forEach(walk);
+                };
+                walk(document.body);
+                return result;
+              };
+              const cam = findCards().find((el) =>
+                el?.config?.title === '固定镜头' ||
+                el?.config?.streams?.some((s) => s.url === 'tplink_ch2_talk')
+              );
+              if (window.__doorMicTimer) clearTimeout(window.__doorMicTimer);
+              window.__doorMicTimer = window.setTimeout(() => {
+                if (cam) {
+                  if (cam.streamID !== 1) cam.nextStream(true);
+                  if (cam.video) cam.video.muted = false;
+                  window.setTimeout(() => {
+                    if (cam.video) cam.video.muted = false;
+                  }, 450);
+                }
+              }, 250);
+            ]]]
+        release_action:
+          action: javascript
+          javascript: |
+            [[[
+              const findCards = () => {
+                const result = [];
+                const walk = (node) => {
+                  if (!node) return;
+                  if (node.tagName && node.tagName.toLowerCase() === 'webrtc-camera') result.push(node);
+                  const next = [];
+                  if (node.shadowRoot) next.push(...node.shadowRoot.children);
+                  if (node.children) next.push(...node.children);
+                  next.forEach(walk);
+                };
+                walk(document.body);
+                return result;
+              };
+              const cam = findCards().find((el) =>
+                el?.config?.title === '固定镜头' ||
+                el?.config?.streams?.some((s) => s.url === 'tplink_ch2_talk')
+              );
+              if (window.__doorMicTimer) clearTimeout(window.__doorMicTimer);
+              if (cam) {
+                if (cam.streamID !== 0) cam.nextStream(true);
+                if (cam.video) cam.video.muted = false;
+                window.setTimeout(() => {
+                  if (cam.video) cam.video.muted = false;
+                }, 450);
+              }
+            ]]]
+
+      - type: custom:button-card
+        icon: mdi:home-export-outline
+        tap_action:
+          action: call-service
+          service: onvif.ptz
+          service_data:
+            entity_id: camera.tp_ipc_mainstream
+            move_mode: GotoPreset
+            preset: '1'
