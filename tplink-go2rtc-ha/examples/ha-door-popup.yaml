@@ -14,7 +14,7 @@ cards:
   - type: custom:button-card
     icon: mdi:cctv
     name: 大门监控
-    label: 双目实时画面、对讲和云台控制
+    label: 双目实时画面、长按对讲和云台控制
     show_state: false
     show_label: true
     tap_action:
@@ -31,13 +31,9 @@ cards:
         title: 云台镜头
 
       - type: custom:webrtc-camera
-        streams:
-          - url: tplink_ch2_main
-            name: ' '
-          - url: tplink_ch2_talk
-            name: '  '
-            mode: webrtc
-            media: video,audio,microphone
+        url: tplink_ch2_talk
+        mode: webrtc
+        media: video,audio,microphone
         ui: true
         title: 固定镜头
 
@@ -50,6 +46,76 @@ cards:
     tap_action:
       action: none
 
+  - type: custom:button-card
+    show_icon: false
+    show_name: true
+    show_label: false
+    tap_action:
+      action: none
+    name: >
+      [[[
+        const createCtl = () => {
+          if (window.__doorMicCtl) return window.__doorMicCtl;
+          window.__doorMicCtl = {
+            findCam() {
+              const result = [];
+              const walk = (node) => {
+                if (!node) return;
+                if (node.tagName && node.tagName.toLowerCase() === 'webrtc-camera') result.push(node);
+                const next = [];
+                if (node.shadowRoot) next.push(...node.shadowRoot.children);
+                if (node.children) next.push(...node.children);
+                next.forEach(walk);
+              };
+              walk(document.body);
+              return result.find((el) =>
+                el?.config?.url === 'tplink_ch2_talk' ||
+                el?.config?.title === '固定镜头'
+              );
+            },
+            setMic(enabled) {
+              const cam = this.findCam();
+              if (!cam?.pc?.getSenders) return false;
+              const senders = cam.pc.getSenders().filter((sender) => sender.track && sender.track.kind === 'audio');
+              if (!senders.length) return false;
+              senders.forEach((sender) => {
+                sender.track.enabled = enabled;
+              });
+              if (cam.video) cam.video.muted = false;
+              return senders.every((sender) => sender.track?.enabled === enabled);
+            },
+          };
+          return window.__doorMicCtl;
+        };
+        const ctl = createCtl();
+        if (!window.__doorMicBooted) {
+          window.__doorMicBooted = true;
+          let attempts = 0;
+          const init = () => {
+            attempts += 1;
+            if (ctl.setMic(false) || attempts > 20) {
+              clearInterval(window.__doorMicBootTimer);
+              window.__doorMicBootTimer = null;
+            }
+          };
+          init();
+          window.__doorMicBootTimer = setInterval(init, 400);
+        }
+        return ' ';
+      ]]]
+    styles:
+      card:
+        - height: 0px
+        - padding: 0
+        - margin: 0
+        - background: none
+        - border: none
+        - box-shadow: none
+      name:
+        - font-size: 0px
+        - line-height: 0
+        - color: transparent
+
   - type: horizontal-stack
     cards:
       - type: custom:button-card
@@ -59,7 +125,7 @@ cards:
         press_action:
           action: javascript
           javascript: |
-            [[[
+            [[[ 
               const findCards = () => {
                 const result = [];
                 const walk = (node) => {
@@ -75,23 +141,28 @@ cards:
               };
               const cam = findCards().find((el) =>
                 el?.config?.title === '固定镜头' ||
-                el?.config?.streams?.some((s) => s.url === 'tplink_ch2_talk')
+                el?.config?.url === 'tplink_ch2_talk'
               );
               if (window.__doorMicTimer) clearTimeout(window.__doorMicTimer);
               window.__doorMicTimer = window.setTimeout(() => {
-                if (cam) {
-                  if (cam.streamID !== 1) cam.nextStream(true);
+                if (cam?.pc?.getSenders) {
+                  const senders = cam.pc.getSenders().filter((sender) => sender.track && sender.track.kind === 'audio');
+                  senders.forEach((sender) => {
+                    sender.track.enabled = true;
+                  });
+                  if (senders.length && senders.every((sender) => sender.track?.enabled)) {
+                    document.documentElement.style.setProperty('--door-mic-bg', 'linear-gradient(180deg, rgba(192, 62, 62, 0.96), rgba(112, 22, 22, 0.98))');
+                    document.documentElement.style.setProperty('--door-mic-border', '1px solid rgba(255, 165, 165, 0.42)');
+                    document.documentElement.style.setProperty('--door-mic-shadow', '0 10px 28px rgba(112, 22, 22, 0.38)');
+                  }
                   if (cam.video) cam.video.muted = false;
-                  window.setTimeout(() => {
-                    if (cam.video) cam.video.muted = false;
-                  }, 450);
                 }
               }, 250);
             ]]]
         release_action:
           action: javascript
           javascript: |
-            [[[
+            [[[ 
               const findCards = () => {
                 const result = [];
                 const walk = (node) => {
@@ -107,17 +178,45 @@ cards:
               };
               const cam = findCards().find((el) =>
                 el?.config?.title === '固定镜头' ||
-                el?.config?.streams?.some((s) => s.url === 'tplink_ch2_talk')
+                el?.config?.url === 'tplink_ch2_talk'
               );
               if (window.__doorMicTimer) clearTimeout(window.__doorMicTimer);
-              if (cam) {
-                if (cam.streamID !== 0) cam.nextStream(true);
+              if (cam?.pc?.getSenders) {
+                const senders = cam.pc.getSenders().filter((sender) => sender.track && sender.track.kind === 'audio');
+                senders.forEach((sender) => {
+                  sender.track.enabled = false;
+                });
+                if (!senders.some((sender) => sender.track?.enabled)) {
+                  document.documentElement.style.removeProperty('--door-mic-bg');
+                  document.documentElement.style.removeProperty('--door-mic-border');
+                  document.documentElement.style.removeProperty('--door-mic-shadow');
+                }
                 if (cam.video) cam.video.muted = false;
-                window.setTimeout(() => {
-                  if (cam.video) cam.video.muted = false;
-                }, 450);
               }
             ]]]
+        styles:
+          card:
+            - height: 56px
+            - border-radius: 999px
+            - background: var(--door-mic-bg, linear-gradient(180deg, rgba(88, 181, 142, 0.34), rgba(19, 64, 53, 0.94)))
+            - border: var(--door-mic-border, 1px solid rgba(133, 225, 188, 0.2))
+            - box-shadow: var(--door-mic-shadow, 0 8px 22px rgba(0, 0, 0, 0.22))
+          icon:
+            - color: '#f0fff8'
+            - width: 24px
+        hold_action:
+          action: none
+
+      - type: custom:button-card
+        icon: mdi:chevron-up
+        tap_action:
+          action: call-service
+          service: onvif.ptz
+          service_data:
+            entity_id: camera.tp_ipc_mainstream
+            tilt: UP
+            move_mode: ContinuousMove
+            continuous_duration: 0.3
 
       - type: custom:button-card
         icon: mdi:home-export-outline
@@ -128,3 +227,53 @@ cards:
             entity_id: camera.tp_ipc_mainstream
             move_mode: GotoPreset
             preset: '1'
+
+  - type: horizontal-stack
+    cards:
+      - type: custom:button-card
+        icon: mdi:chevron-left
+        tap_action:
+          action: call-service
+          service: onvif.ptz
+          service_data:
+            entity_id: camera.tp_ipc_mainstream
+            pan: LEFT
+            move_mode: ContinuousMove
+            continuous_duration: 0.3
+
+      - type: custom:button-card
+        icon: mdi:stop
+        tap_action:
+          action: call-service
+          service: onvif.ptz
+          service_data:
+            entity_id: camera.tp_ipc_mainstream
+            move_mode: Stop
+
+      - type: custom:button-card
+        icon: mdi:chevron-right
+        tap_action:
+          action: call-service
+          service: onvif.ptz
+          service_data:
+            entity_id: camera.tp_ipc_mainstream
+            pan: RIGHT
+            move_mode: ContinuousMove
+            continuous_duration: 0.3
+
+  - type: horizontal-stack
+    cards:
+      - type: markdown
+        content: ' '
+      - type: custom:button-card
+        icon: mdi:chevron-down
+        tap_action:
+          action: call-service
+          service: onvif.ptz
+          service_data:
+            entity_id: camera.tp_ipc_mainstream
+            tilt: DOWN
+            move_mode: ContinuousMove
+            continuous_duration: 0.3
+      - type: markdown
+        content: ' '
